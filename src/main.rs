@@ -60,7 +60,7 @@ fn the_program(){
                             }
                             else if batt_capacity < batt_low_percentage{
                                 println!("Batt {}", batt_capacity);
-                                Command::new("dunstify").arg("-u").arg("2").arg(&format!("{batt_capacity} Battery remaining, please plug in the charger.")).spawn().expect("Failed!");
+                                std::process::Command::new("dunstify").arg("-u").arg("2").arg(&format!("{batt_capacity} Battery remaining, please plug in the charger.")).spawn().expect("Failed!");
                                 std::thread::sleep(Duration::from_secs(sleep_time_fast));
                             }
                             else {
