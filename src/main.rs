@@ -64,7 +64,7 @@ fn the_program(){
                                 std::thread::sleep(Duration::from_secs(sleep_time_alert));
                             }
                             else {
-                                println!("More than {}", batt_capacity);
+                                println!("Batt level {}", batt_capacity);
                                 std::thread::sleep(Duration::from_secs(sleep_time_normal));
                                 }
                             }
