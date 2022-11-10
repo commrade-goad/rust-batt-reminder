@@ -56,12 +56,12 @@ fn the_program(){
         "Discharging\n" => {println!("Battery is Discharging");
                             if batt_capacity < batt_alert_percentage {
                                 println!("Batt {}", batt_capacity);
-                                std::thread::sleep(Duration::from_secs(sleep_time_alert));
+                                std::thread::sleep(Duration::from_secs(sleep_time_fast));
+                                std::process::Command::new("dunstify").arg("-u").arg("2").arg(&format!("{batt_capacity} Battery remaining, please plug in the charger.")).spawn().expect("Failed!");
                             }
                             else if batt_capacity < batt_low_percentage{
                                 println!("Batt {}", batt_capacity);
-                                std::process::Command::new("dunstify").arg("-u").arg("2").arg(&format!("{batt_capacity} Battery remaining, please plug in the charger.")).spawn().expect("Failed!");
-                                std::thread::sleep(Duration::from_secs(sleep_time_fast));
+                                std::thread::sleep(Duration::from_secs(sleep_time_alert));
                             }
                             else {
                                 println!("More than {}", batt_capacity);
