@@ -97,10 +97,9 @@ fn main() -> Result<(), Error>{
             if check_lock == 1 {
                 std::process::exit(1);
             }
-        let mut program_loop = 1;
+        let program_loop = 1;
         while program_loop == 1 {
             the_program();
-            program_loop = 0;
             };        
     });
 
