@@ -99,11 +99,12 @@ fn play_notif_sound(_path_to_file:String) {
 
 fn get_args() -> String {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 1 {
+    if args.len() < 2 {
         println!("ERROR : Please specify the path to the notification sound!");
         process::exit(1);
     }
-    let path_to_file: String = args[1].parse().unwrap_or_else(|e| {
+    println!("{:?}",args);
+    let path_to_file: String = args[2].parse().unwrap_or_else(|e| {
         println!("{e}");
         process::exit(1);
     });
