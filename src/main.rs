@@ -104,7 +104,7 @@ fn get_args() -> String {
         process::exit(1);
     }
     println!("{:?}",args);
-    let path_to_file: String = args[2].parse().unwrap_or_else(|e| {
+    let path_to_file: String = args[1].parse().unwrap_or_else(|e| {
         println!("{e}");
         process::exit(1);
     });
