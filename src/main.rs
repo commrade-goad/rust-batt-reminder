@@ -53,7 +53,6 @@ fn the_program(_path_to_file:String){
                         std::thread::sleep(Duration::from_secs(sleep_time_normal));
                         }
         "Full\n" => {println!("Battery is Full");
-                    play_notif_sound(&_path_to_file);
                     std::thread::sleep(Duration::from_secs(sleep_time_normal));
                     }
         "Discharging\n" => {println!("Battery is Discharging");
