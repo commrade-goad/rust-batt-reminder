@@ -53,13 +53,14 @@ fn the_program(_path_to_file:String){
                         std::thread::sleep(Duration::from_secs(sleep_time_normal));
                         }
         "Full\n" => {println!("Battery is Full");
+                    play_notif_sound(&_path_to_file);
                     std::thread::sleep(Duration::from_secs(sleep_time_normal));
                     }
         "Discharging\n" => {println!("Battery is Discharging");
                             if batt_capacity < batt_alert_percentage {
                                 println!("Batt {}", batt_capacity);
                                 std::process::Command::new("/usr/bin/dunstify").arg("-u").arg("2").arg(&format!("{batt_capacity} Battery remaining, please plug in the charger.")).spawn().expect("Failed!");
-                                play_notif_sound(_path_to_file);
+                                play_notif_sound(&_path_to_file);
                                 std::thread::sleep(Duration::from_secs(sleep_time_fast));
                             }
                             else if batt_capacity < batt_low_percentage{
@@ -90,11 +91,12 @@ fn get_session_env() -> i32 {
     }
 }
 
-fn play_notif_sound(_path_to_file:String) {
+fn play_notif_sound(_path_to_file:&String) {
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     let file = BufReader::new(fs::File::open(_path_to_file).unwrap());
     let source = Decoder::new(file).unwrap();
     stream_handle.play_raw(source.convert_samples()).expect("ERROR : Failed to play the audio!");
+    std::thread::sleep(std::time::Duration::from_secs(2));
 }
 
 fn get_args() -> String {
@@ -103,7 +105,6 @@ fn get_args() -> String {
         println!("ERROR : Please specify the path to the notification sound!");
         process::exit(1);
     }
-    println!("{:?}",args);
     let path_to_file: String = args[1].parse().unwrap_or_else(|e| {
         println!("{e}");
         process::exit(1);
