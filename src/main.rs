@@ -8,6 +8,8 @@ use std::thread;
 use signal_hook::flag;
 use std::env;
 use std::process;
+use std::io::BufReader;
+use rodio::{Decoder, OutputStream, source::Source};
 
 fn get_batt_percentage() -> i32 {
     let batt_capacity_percentage: String = fs::read_to_string("/sys/class/power_supply/BAT1/capacity")
@@ -36,7 +38,7 @@ fn program_lock() -> i32 {
         }
 }
 
-fn the_program(){
+fn the_program(_path_to_file:String){
     // basic settings
     let batt_alert_percentage:i32 = 30;
     let batt_low_percentage:i32 = 45;
@@ -57,6 +59,7 @@ fn the_program(){
                             if batt_capacity < batt_alert_percentage {
                                 println!("Batt {}", batt_capacity);
                                 std::process::Command::new("/usr/bin/dunstify").arg("-u").arg("2").arg(&format!("{batt_capacity} Battery remaining, please plug in the charger.")).spawn().expect("Failed!");
+                                play_notif_sound(_path_to_file);
                                 std::thread::sleep(Duration::from_secs(sleep_time_fast));
                             }
                             else if batt_capacity < batt_low_percentage{
@@ -87,8 +90,29 @@ fn get_session_env() -> i32 {
     }
 }
 
+fn play_notif_sound(_path_to_file:String) {
+    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+    let file = BufReader::new(fs::File::open(_path_to_file).unwrap());
+    let source = Decoder::new(file).unwrap();
+    stream_handle.play_raw(source.convert_samples()).expect("ERROR : Failed to play the audio!");
+}
+
+fn get_args() -> String {
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 1 {
+        println!("ERROR : Please specify the path to the notification sound!");
+        process::exit(1);
+    }
+    let path_to_file: String = args[1].parse().unwrap_or_else(|e| {
+        println!("{e}");
+        process::exit(1);
+    });
+    return path_to_file;
+}
+
 fn main() -> Result<(), Error>{
     thread::spawn(move ||{ 
+        let _path_to_file:String = get_args();
         let check_session = get_session_env();
         if check_session == 1{
             process::exit(1);
@@ -99,7 +123,7 @@ fn main() -> Result<(), Error>{
             }
         let program_loop = 1;
         while program_loop == 1 {
-            the_program();
+            the_program(_path_to_file.parse().unwrap());
             };        
     });
 
