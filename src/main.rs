@@ -28,7 +28,7 @@ fn program_lock() -> i32 {
         let lock_file_location: String = "/tmp/batt_file_lock.lock".to_string();
         let file_lock_check = std::path::Path::new(&lock_file_location).is_file();
         if file_lock_check == false { 
-            let mut file_lock = std::fs::File::create(lock_file_location).expect("Error encountered while creating file!"); 
+            let mut file_lock = fs::File::create(lock_file_location).expect("Error encountered while creating file!"); 
             file_lock.write_all(b"Running\n").expect("Error while writing to file");
             return 0;
         }
@@ -50,31 +50,31 @@ fn the_program(_path_to_file:String){
     let batt_capacity: i32 = get_batt_percentage();
     match &batt_status[..]{
         "Charging\n" => { println!("Battery is Charging");
-                        std::thread::sleep(Duration::from_secs(sleep_time_normal));
+                        thread::sleep(Duration::from_secs(sleep_time_normal));
                         }
         "Full\n" => {println!("Battery is Full");
-                    std::thread::sleep(Duration::from_secs(sleep_time_normal));
+                    thread::sleep(Duration::from_secs(sleep_time_normal));
                     }
         "Discharging\n" => {println!("Battery is Discharging");
                             if batt_capacity < batt_alert_percentage {
                                 println!("Batt {}", batt_capacity);
-                                std::process::Command::new("/usr/bin/dunstify").arg("-u").arg("2").arg(&format!("{batt_capacity} Battery remaining, please plug in the charger.")).spawn().expect("Failed!");
+                                process::Command::new("/usr/bin/dunstify").arg("-u").arg("2").arg(&format!("{batt_capacity} Battery remaining, please plug in the charger.")).spawn().expect("Failed!");
                                 play_notif_sound(&_path_to_file);
-                                std::thread::sleep(Duration::from_secs(sleep_time_fast));
+                                thread::sleep(Duration::from_secs(sleep_time_fast));
                             }
                             else if batt_capacity < batt_low_percentage{
                                 println!("Batt {}", batt_capacity);
-                                std::thread::sleep(Duration::from_secs(sleep_time_alert));
+                                thread::sleep(Duration::from_secs(sleep_time_alert));
                             }
                             else {
                                 println!("Batt level {}", batt_capacity);
-                                std::thread::sleep(Duration::from_secs(sleep_time_normal));
+                                thread::sleep(Duration::from_secs(sleep_time_normal));
                                 }
                             }
         _ => {println!("Unknown.")
                  }
             }
-        std::thread::sleep(Duration::from_secs(5));
+        thread::sleep(Duration::from_secs(5));
 
 }
 
@@ -95,7 +95,7 @@ fn play_notif_sound(_path_to_file:&String) {
     let file = BufReader::new(fs::File::open(_path_to_file).unwrap());
     let source = Decoder::new(file).unwrap();
     stream_handle.play_raw(source.convert_samples()).expect("ERROR : Failed to play the audio!");
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    thread::sleep(std::time::Duration::from_secs(2));
 }
 
 fn get_args() -> String {
@@ -125,7 +125,7 @@ fn main() -> Result<(), Error>{
         let program_loop = 1;
         while program_loop == 1 {
             the_program(_path_to_file.parse().unwrap());
-            };        
+            };
     });
 
     let term = Arc::new(AtomicBool::new(false));
