@@ -10,6 +10,57 @@ use std::env;
 use std::process;
 use std::io::BufReader;
 use rodio::{Decoder, OutputStream, source::Source};
+use serde_derive::Deserialize;
+use toml;
+
+// CONFIG STRUCT
+
+#[derive(Deserialize)]
+struct Data {
+    config: Config,
+}
+
+#[derive(Deserialize)]
+struct Config {
+    audio_path: String,
+}
+
+//
+
+fn read_configuration_file() -> String{
+    let home_env:String = "HOME".to_string();
+    let mut path_to_conf:String = match env::var(&home_env){
+        Ok(val) => val,
+        Err(e) => panic!("could not find {}: {}", &home_env, e),
+    };
+    path_to_conf.push_str("/.config/batt_reminder.toml");
+    let is_config_exist = std::path::Path::new(&path_to_conf).is_file();
+    if is_config_exist == false {
+        let mut create_config = fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
+        create_config.write_all(b"[config]\naudio_path = \"/home/fernando/git/rust-batt-reminder/assets/notification_sound.mp3\"").expect("Error while writing to file");
+        println!("Created the config file.");
+    }
+    else{
+        println!("Reading the config file..");
+    }
+    let contents: String = match fs::read_to_string(path_to_conf){
+        Ok(c) => c,
+        Err(_) =>{
+            println!("Error reading the configuration file!");
+            process::exit(1);
+        }
+    };
+    let data: Data = match toml::from_str(&contents) {
+        Ok(d) => d,
+        Err(_) => {
+            println!("Unable to load the config file!");
+            process::exit(1);
+        }
+    };
+    println!("audio : {}",data.config.audio_path);
+    return data.config.audio_path;
+
+}
 
 fn get_batt_percentage() -> i32 {
     let batt_capacity_percentage: String = fs::read_to_string("/sys/class/power_supply/BAT1/capacity")
@@ -57,13 +108,16 @@ fn the_program(_path_to_file:String){
                     }
         "Discharging\n" => {println!("Battery is Discharging");
                             if batt_capacity < batt_alert_percentage {
-                                println!("Batt {}", batt_capacity);
+                                println!("Batt level {}", batt_capacity);
                                 process::Command::new("/usr/bin/dunstify").arg("-u").arg("2").arg(&format!("{batt_capacity} Battery remaining, please plug in the charger.")).spawn().expect("Failed!");
-                                play_notif_sound(&_path_to_file);
+                                match play_notif_sound(&_path_to_file){
+                                    Ok(..) => {println!("Audio played");}
+                                    _ => {println!("Audio Cant be played");}
+                                };
                                 thread::sleep(Duration::from_secs(sleep_time_fast));
                             }
                             else if batt_capacity < batt_low_percentage{
-                                println!("Batt {}", batt_capacity);
+                                println!("Batt level {}", batt_capacity);
                                 thread::sleep(Duration::from_secs(sleep_time_alert));
                             }
                             else {
@@ -90,31 +144,30 @@ fn get_session_env() -> i32 {
     }
 }
 
-fn play_notif_sound(_path_to_file:&String) {
-    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-    let file = BufReader::new(fs::File::open(_path_to_file).unwrap());
-    let source = Decoder::new(file).unwrap();
-    stream_handle.play_raw(source.convert_samples()).expect("ERROR : Failed to play the audio!");
-    thread::sleep(std::time::Duration::from_secs(2));
-}
-
-fn get_args() -> String {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        println!("ERROR : Please specify the path to the notification sound!");
-        process::exit(1);
+fn play_notif_sound(_path_to_file:&String) -> Result<i32, i32>{
+    let check_file = std::path::Path::new(&_path_to_file).is_file();
+    if check_file == false {
+        println!("Error : Cant read the specified file directory!");
+        return Err(1);
     }
-    let path_to_file: String = args[1].parse().unwrap_or_else(|e| {
-        println!("{e}");
-        process::exit(1);
-    });
-    return path_to_file;
+    else{
+        let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+        let file = BufReader::new(fs::File::open(_path_to_file).unwrap());
+        let source = Decoder::new(file).unwrap();
+        stream_handle.play_raw(source.convert_samples()).expect("ERROR : Failed to play the audio!");
+        thread::sleep(std::time::Duration::from_secs(2));
+        return Ok(0);
+    }
 }
 
 fn main() -> Result<(), Error>{
     thread::spawn(move ||{ 
-        let _path_to_file:String = get_args();
         let check_session = get_session_env();
+        let _path_to_file:String = read_configuration_file();
+        match play_notif_sound(&_path_to_file){
+            Ok(..) => {println!("Audio played");}
+            _ => {println!("Audio Cant be played");}
+        };
         if check_session == 1{
             process::exit(1);
         }
@@ -139,3 +192,4 @@ fn main() -> Result<(), Error>{
     std::fs::remove_file("/tmp/batt_file_lock.lock").expect("Failed to delete the lock file.\n Please delete it manually.");
     Ok(())
 }
+
