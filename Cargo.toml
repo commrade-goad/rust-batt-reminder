@@ -8,3 +8,6 @@ edition = "2021"
 [dependencies]
 signal-hook = "*"
 rodio = "*"
+serde = "*"
+toml = "*"
+serde_derive = "*"
