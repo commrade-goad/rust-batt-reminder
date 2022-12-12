@@ -23,11 +23,16 @@ struct Data {
 #[derive(Deserialize)]
 struct Config {
     audio_path: String,
+    battery_critical: i32,
+    battery_low: i32,
+    normal_sleep_time: u64,
+    fast_sleep_time: u64,
+    critical_sleep_time:u64,
 }
 
 //
 
-fn read_configuration_file() -> String{
+fn read_configuration_file() -> (String, i32, i32, u64, u64, u64){
     let home_env:String = "HOME".to_string();
     let mut path_to_conf:String = match env::var(&home_env){
         Ok(val) => val,
@@ -37,8 +42,9 @@ fn read_configuration_file() -> String{
     let is_config_exist = std::path::Path::new(&path_to_conf).is_file();
     if is_config_exist == false {
         let mut create_config = fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
-        create_config.write_all(b"[config]\naudio_path = \"/home/fernando/git/rust-batt-reminder/assets/notification_sound.mp3\"").expect("Error while writing to file");
+        create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120").expect("Error while writing to file");
         println!("Created the config file.");
+        process::exit(0);
     }
     else{
         println!("Reading the config file..");
@@ -58,7 +64,12 @@ fn read_configuration_file() -> String{
         }
     };
     println!("audio : {}",data.config.audio_path);
-    return data.config.audio_path;
+    println!("battery_critical : {}",data.config.battery_critical);
+    println!("battery_low : {}",data.config.battery_low);
+    println!("normal_sleep_time : {}",data.config.normal_sleep_time);
+    println!("fast_sleep_time : {}",data.config.fast_sleep_time);
+    println!("critical_sleep_time : {}",data.config.critical_sleep_time);
+    return (data.config.audio_path, data.config.battery_critical, data.config.battery_low, data.config.normal_sleep_time, data.config.fast_sleep_time, data.config.critical_sleep_time);
 
 }
 
@@ -89,18 +100,19 @@ fn program_lock() -> i32 {
         }
 }
 
-fn the_program(_path_to_file:String){
+fn the_program(configuration: &(String, i32, i32, u64, u64, u64)){
     // basic settings
-    let batt_alert_percentage:i32 = 30;
-    let batt_low_percentage:i32 = 45;
-    let sleep_time_normal:u64 = 300;
-    let sleep_time_fast:u64 = 120;
-    let sleep_time_alert:u64 = 5;
+    let batt_alert_percentage:i32 = configuration.1;
+    let batt_low_percentage:i32 = configuration.2;
+    let sleep_time_normal:u64 = configuration.3;
+    let sleep_time_alert:u64 = configuration.4;
+    let sleep_time_fast:u64 = configuration.5;
 
     let batt_status: String = get_batt_status();
     let batt_capacity: i32 = get_batt_percentage();
     match &batt_status[..]{
         "Charging\n" => { println!("Battery is Charging");
+                        println!("Batt level {}", batt_capacity);
                         thread::sleep(Duration::from_secs(sleep_time_normal));
                         }
         "Full\n" => {println!("Battery is Full");
@@ -110,7 +122,7 @@ fn the_program(_path_to_file:String){
                             if batt_capacity < batt_alert_percentage {
                                 println!("Batt level {}", batt_capacity);
                                 process::Command::new("/usr/bin/dunstify").arg("-u").arg("2").arg(&format!("{batt_capacity} Battery remaining, please plug in the charger.")).spawn().expect("Failed!");
-                                match play_notif_sound(&_path_to_file){
+                                match play_notif_sound(&configuration.0.parse().unwrap()){
                                     Ok(..) => {println!("Audio played");}
                                     _ => {println!("Audio Cant be played");}
                                 };
@@ -163,8 +175,8 @@ fn play_notif_sound(_path_to_file:&String) -> Result<i32, i32>{
 fn main() -> Result<(), Error>{
     thread::spawn(move ||{ 
         let check_session = get_session_env();
-        let _path_to_file:String = read_configuration_file();
-        match play_notif_sound(&_path_to_file){
+        let user_configuration = read_configuration_file();
+        match play_notif_sound(&user_configuration.0){
             Ok(..) => {println!("Audio played");}
             _ => {println!("Audio Cant be played");}
         };
@@ -177,7 +189,7 @@ fn main() -> Result<(), Error>{
             }
         let program_loop = 1;
         while program_loop == 1 {
-            the_program(_path_to_file.parse().unwrap());
+            the_program(&user_configuration);
             };
     });
 
@@ -192,4 +204,3 @@ fn main() -> Result<(), Error>{
     std::fs::remove_file("/tmp/batt_file_lock.lock").expect("Failed to delete the lock file.\n Please delete it manually.");
     Ok(())
 }
-
