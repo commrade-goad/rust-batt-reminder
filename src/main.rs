@@ -85,7 +85,7 @@ fn get_batt_percentage() -> i32 {
     let batt_capacity_percentage: String =
         fs::read_to_string("/sys/class/power_supply/BAT1/capacity")
             .expect("Failed read the battery capacity!");
-    let batt_capacity_percentage_int: i32 = batt_capacity_percentage.parse::<i32>().unwrap();
+    let batt_capacity_percentage_int: i32 = batt_capacity_percentage.trim().parse::<i32>().unwrap();
     return batt_capacity_percentage_int;
 }
 
