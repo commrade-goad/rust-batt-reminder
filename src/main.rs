@@ -224,7 +224,7 @@ fn main() -> Result<(), Error> {
         }
         let check_lock = program_lock();
         if check_lock == 1 {
-            std::process::exit(1);
+            process::exit(1);
         }
         let program_loop = 1;
         while program_loop == 1 {
@@ -238,9 +238,9 @@ fn main() -> Result<(), Error> {
         flag::register(*sig, Arc::clone(&term))?;
     }
     while !term.load(Ordering::Relaxed) {
-        std::thread::sleep(Duration::from_secs(2));
+        thread::sleep(Duration::from_secs(2));
     }
-    std::fs::remove_file("/tmp/batt_file_lock.lock")
+    fs::remove_file("/tmp/batt_file_lock.lock")
         .expect("Failed to delete the lock file.\n Please delete it manually.");
     Ok(())
 }
