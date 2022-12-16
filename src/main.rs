@@ -28,11 +28,12 @@ struct Config {
     normal_sleep_time: u64,
     fast_sleep_time: u64,
     critical_sleep_time: u64,
+    starting_bleep: bool,
 }
 
 //
 
-fn read_configuration_file() -> (String, i32, i32, u64, u64, u64) {
+fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool) {
     let home_env: String = "HOME".to_string();
     let mut path_to_conf: String = match env::var(&home_env) {
         Ok(val) => val,
@@ -43,8 +44,8 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64) {
         false => {
             let mut create_config =
                 fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
-            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120").expect("Error while writing to file");
-            println!("Created the config file.");
+            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true").expect("Error while writing to file");
+            println!("Created the config file, please restart the script.");
             process::exit(0);
         }
         true => {
@@ -69,6 +70,7 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64) {
             println!("normal_sleep_time : {}", data.config.normal_sleep_time);
             println!("fast_sleep_time : {}", data.config.fast_sleep_time);
             println!("critical_sleep_time : {}", data.config.critical_sleep_time);
+            println!("starting_bleep = {}",data.config.starting_bleep);
             return (
                 data.config.audio_path,
                 data.config.battery_critical,
@@ -76,6 +78,7 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64) {
                 data.config.normal_sleep_time,
                 data.config.fast_sleep_time,
                 data.config.critical_sleep_time,
+                data.config.starting_bleep,
             );
         }
     }
@@ -116,7 +119,7 @@ fn program_lock() -> i32 {
     }
 }
 
-fn the_program(configuration: &(String, i32, i32, u64, u64, u64)) {
+fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool)) {
     // basic settings
     let batt_alert_percentage: i32 = configuration.1;
     let batt_low_percentage: i32 = configuration.2;
@@ -211,13 +214,18 @@ fn main() -> Result<(), Error> {
     thread::spawn(move || {
         let check_session = get_session_env();
         let user_configuration = read_configuration_file();
-        match play_notif_sound(&user_configuration.0) {
-            Ok(..) => {
-                println!("Audio played");
+        match user_configuration.6 {
+            true => {
+                match play_notif_sound(&user_configuration.0) {
+                    Ok(..) => {
+                        println!("Audio played");
+                    }
+                    _ => {
+                        println!("Audio Cant be played");
+                    }
+                };
             }
-            _ => {
-                println!("Audio Cant be played");
-            }
+            false => {}
         };
         if check_session == 1 {
             process::exit(1);
