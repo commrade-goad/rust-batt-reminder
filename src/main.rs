@@ -45,8 +45,17 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool) {
             let mut create_config =
                 fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
             create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true").expect("Error while writing to file");
-            println!("Created the config file, please restart the script.");
-            process::exit(0);
+            println!("Created the config file.\nusing the default settings.");
+            return (
+                // using default settings
+                "none".to_string(),
+                30,
+                45,
+                300,
+                5,
+                120,
+                false,
+            );
         }
         true => {
             println!("Reading the config file..");
@@ -64,13 +73,6 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool) {
                     process::exit(1);
                 }
             };
-            println!("audio : {}", data.config.audio_path);
-            println!("battery_critical : {}", data.config.battery_critical);
-            println!("battery_low : {}", data.config.battery_low);
-            println!("normal_sleep_time : {}", data.config.normal_sleep_time);
-            println!("fast_sleep_time : {}", data.config.fast_sleep_time);
-            println!("critical_sleep_time : {}", data.config.critical_sleep_time);
-            println!("starting_bleep = {}",data.config.starting_bleep);
             return (
                 data.config.audio_path,
                 data.config.battery_critical,
@@ -192,6 +194,10 @@ fn get_session_env() -> i32 {
 }
 
 fn play_notif_sound(_path_to_file: &String) -> Result<i32, i32> {
+    match &_path_to_file[..] {
+        "none" => {return Err(1);}
+        _ => {}
+    }
     match std::path::Path::new(&_path_to_file).is_file() {
         false => {
             println!("Error : Cant read the specified file directory!");
@@ -214,6 +220,15 @@ fn main() -> Result<(), Error> {
     thread::spawn(move || {
         let check_session = get_session_env();
         let user_configuration = read_configuration_file();
+        // print user config for debug
+        println!("audio_path : {}", user_configuration.0);
+        println!("battery_critical : {}", user_configuration.1);
+        println!("battery_low : {}", user_configuration.2);
+        println!("normal_sleep_time : {}", user_configuration.3);
+        println!("fast_sleep_time : {}", user_configuration.4);
+        println!("critical_sleep_time : {}", user_configuration.5);
+        println!("starting_bleep = {}",user_configuration.6);
+
         match user_configuration.6 {
             true => {
                 match play_notif_sound(&user_configuration.0) {
