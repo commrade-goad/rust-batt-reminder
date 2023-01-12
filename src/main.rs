@@ -29,11 +29,12 @@ struct Config {
     fast_sleep_time: u64,
     critical_sleep_time: u64,
     starting_bleep: bool,
+    target_session: String,
 }
 
 //
 
-fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool) {
+fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String) {
     let home_env: String = "HOME".to_string();
     let mut path_to_conf: String = match env::var(&home_env) {
         Ok(val) => val,
@@ -44,7 +45,7 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool) {
         false => {
             let mut create_config =
                 fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
-            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true").expect("Error while writing to file");
+            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = \"sway\"").expect("Error while writing to file");
             println!("Created the config file.\nusing the default settings.");
             return (
                 // using default settings
@@ -55,6 +56,7 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool) {
                 5,
                 120,
                 false,
+                "sway".to_string(),
             );
         }
         true => {
@@ -81,6 +83,7 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool) {
                 data.config.fast_sleep_time,
                 data.config.critical_sleep_time,
                 data.config.starting_bleep,
+                data.config.target_session,
             );
         }
     }
@@ -121,7 +124,7 @@ fn program_lock() -> i32 {
     }
 }
 
-fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool)) {
+fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, String)) {
     // basic settings
     let batt_alert_percentage: i32 = configuration.1;
     let batt_low_percentage: i32 = configuration.2;
@@ -177,14 +180,15 @@ fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool)) {
     thread::sleep(Duration::from_secs(5));
 }
 
-fn get_session_env() -> i32 {
+fn get_session_env(session: &String) -> i32 {
+    let intended_session_name = &session.to_owned();
     let some_value = "XDG_CURRENT_DESKTOP".to_string();
     let get_current_session = match env::var(&some_value) {
         Ok(val) => val,
         Err(e) => panic!("could not find {}: {}", &some_value, e),
     };
-    match &get_current_session[..] {
-        "sway" => {
+    match &get_current_session.eq(intended_session_name) {
+        true => {
             return 0;
         }
         _ => {
@@ -195,7 +199,9 @@ fn get_session_env() -> i32 {
 
 fn play_notif_sound(_path_to_file: &String) -> Result<i32, i32> {
     match &_path_to_file[..] {
-        "none" => {return Err(1);}
+        "none" => {
+            return Err(1);
+        }
         _ => {}
     }
     match std::path::Path::new(&_path_to_file).is_file() {
@@ -218,7 +224,6 @@ fn play_notif_sound(_path_to_file: &String) -> Result<i32, i32> {
 
 fn main() -> Result<(), Error> {
     thread::spawn(move || {
-        let check_session = get_session_env();
         let user_configuration = read_configuration_file();
         // print user config for debug
         println!("audio_path : {}", user_configuration.0);
@@ -227,8 +232,10 @@ fn main() -> Result<(), Error> {
         println!("normal_sleep_time : {}", user_configuration.3);
         println!("fast_sleep_time : {}", user_configuration.4);
         println!("critical_sleep_time : {}", user_configuration.5);
-        println!("starting_bleep = {}",user_configuration.6);
+        println!("starting_bleep = {}", user_configuration.6);
+        println!("target_session = {}", user_configuration.7);
 
+        let check_session = get_session_env(&user_configuration.7);
         match user_configuration.6 {
             true => {
                 match play_notif_sound(&user_configuration.0) {
