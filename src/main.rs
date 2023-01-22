@@ -60,7 +60,6 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String) 
             );
         }
         true => {
-            println!("Reading the config file..");
             let contents: String = match fs::read_to_string(path_to_conf) {
                 Ok(c) => c,
                 Err(_) => {
@@ -222,8 +221,37 @@ fn play_notif_sound(_path_to_file: &String) -> Result<i32, i32> {
     }
 }
 
+fn check_charging(path_to_file: &String){
+    println!("check_charging: this thread will check if the battery is Discharging every 2 secs...");
+    loop {
+        let battery_status = get_batt_status();
+        match &battery_status[..]{
+            "Discharging" => {
+                thread::sleep(Duration::from_secs(2));
+                match &get_batt_status()[..] {
+                    "Discharging" => {}
+                    _ => {
+                        match play_notif_sound(&path_to_file) {
+                            Ok(..) => {
+                                println!("Audio played");
+                            }
+                            _ => {
+                                println!("Audio Cant be played");
+                            }
+                        };
+                    }
+                }
+            }
+            _ => {
+                thread::sleep(Duration::from_secs(10));
+            }
+        }
+    }
+}
+
 fn main() -> Result<(), Error> {
     thread::spawn(move || {
+        println!("Reading the configuration file...");
         let user_configuration = read_configuration_file();
         // print user config for debug
         println!("audio_path : {}", user_configuration.0);
@@ -260,6 +288,10 @@ fn main() -> Result<(), Error> {
         while program_loop == 1 {
             the_program(&user_configuration);
         }
+    });
+
+    thread::spawn(move || {
+        check_charging(&read_configuration_file().0);
     });
 
     let term = Arc::new(AtomicBool::new(false));
