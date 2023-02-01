@@ -30,11 +30,13 @@ struct Config {
     critical_sleep_time: u64,
     starting_bleep: bool,
     target_session: String,
+    enable_plug_in_check: bool,
+    plug_in_check_interval: u64,
 }
 
 //
 
-fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String) {
+fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String, bool, u64) {
     let home_env: String = "HOME".to_string();
     let mut path_to_conf: String = match env::var(&home_env) {
         Ok(val) => val,
@@ -57,6 +59,8 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String) 
                 120,
                 false,
                 "sway".to_string(),
+                true,
+                2,
             );
         }
         true => {
@@ -83,6 +87,8 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String) 
                 data.config.critical_sleep_time,
                 data.config.starting_bleep,
                 data.config.target_session,
+                data.config.enable_plug_in_check,
+                data.config.plug_in_check_interval,
             );
         }
     }
@@ -115,7 +121,7 @@ fn program_lock() -> i32 {
         }
         true => {
             println!(
-                "The program is already running.\nclose the program and do 'rm {}'",
+                "The program is already running.\nclose the program and do 'rm {}' if the lock file failed to be deleted automatically",
                 lock_file_location
             );
             return 1;
@@ -123,7 +129,7 @@ fn program_lock() -> i32 {
     }
 }
 
-fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, String)) {
+fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, String, bool, u64)) {
     // basic settings
     let batt_alert_percentage: i32 = configuration.1;
     let batt_low_percentage: i32 = configuration.2;
@@ -221,8 +227,8 @@ fn play_notif_sound(_path_to_file: &String) -> Result<i32, i32> {
     }
 }
 
-fn check_charging(path_to_file: &String){
-    println!("check_charging: this thread will check if the battery is Discharging every 2 secs...");
+fn check_charging(path_to_file: &String, interval: u64){
+    println!("check_charging: this thread will check if the battery is Discharging every {} sec(s)...", &interval);
     loop {
         let battery_status = get_batt_status();
         match &battery_status[..]{
@@ -243,25 +249,29 @@ fn check_charging(path_to_file: &String){
                 }
             }
             _ => {
-                thread::sleep(Duration::from_secs(10));
+                thread::sleep(Duration::from_secs(interval));
             }
         }
     }
 }
 
 fn main() -> Result<(), Error> {
+    let user_configuration = read_configuration_file();
+    println!("Reading the configuration file...");
     thread::spawn(move || {
-        println!("Reading the configuration file...");
         let user_configuration = read_configuration_file();
         // print user config for debug
-        println!("audio_path : {}", user_configuration.0);
-        println!("battery_critical : {}", user_configuration.1);
-        println!("battery_low : {}", user_configuration.2);
-        println!("normal_sleep_time : {}", user_configuration.3);
-        println!("fast_sleep_time : {}", user_configuration.4);
-        println!("critical_sleep_time : {}", user_configuration.5);
-        println!("starting_bleep = {}", user_configuration.6);
-        println!("target_session = {}", user_configuration.7);
+        println!("== Configuration ==");
+        println!("\taudio_path : {}", user_configuration.0);
+        println!("\tbattery_critical : {}", user_configuration.1);
+        println!("\tbattery_low : {}", user_configuration.2);
+        println!("\tnormal_sleep_time : {}", user_configuration.3);
+        println!("\tfast_sleep_time : {}", user_configuration.4);
+        println!("\tcritical_sleep_time : {}", user_configuration.5);
+        println!("\tstarting_bleep : {}", user_configuration.6);
+        println!("\ttarget_session : {}", user_configuration.7);
+        println!("\tenable_plug_in_check : {}", user_configuration.8);
+        println!("\tplug_in_check_interval : {}", user_configuration.9);
 
         let check_session = get_session_env(&user_configuration.7);
         match user_configuration.6 {
@@ -289,10 +299,17 @@ fn main() -> Result<(), Error> {
             the_program(&user_configuration);
         }
     });
-
-    thread::spawn(move || {
-        check_charging(&read_configuration_file().0);
-    });
+    
+    match &user_configuration.8 {
+        true => {
+            thread::spawn(move || {
+                check_charging(&user_configuration.0, user_configuration.9);
+            });
+        }
+        false => {
+        }
+    }
+    
 
     let term = Arc::new(AtomicBool::new(false));
     for sig in signal_hook::consts::TERM_SIGNALS {
