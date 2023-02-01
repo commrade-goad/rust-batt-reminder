@@ -232,8 +232,9 @@ fn check_charging(path_to_file: &String, interval: u64){
     loop {
         let battery_status = get_batt_status();
         match &battery_status[..]{
+            // check from Discharging to charging
             "Discharging" => {
-                thread::sleep(Duration::from_secs(2));
+                thread::sleep(Duration::from_secs(interval));
                 match &get_batt_status()[..] {
                     "Discharging" => {}
                     _ => {
@@ -249,7 +250,23 @@ fn check_charging(path_to_file: &String, interval: u64){
                 }
             }
             _ => {
+                // check from charging or full to Discharge
                 thread::sleep(Duration::from_secs(interval));
+                match &get_batt_status()[..]{
+                    "Discharging" => {
+                        match play_notif_sound(&path_to_file) {
+                            Ok(..) => {
+                                println!("Audio played");
+                            }
+                            _ => {
+                                println!("Audio Cant be played");
+                            }
+                        };
+                    }
+                    _ => {
+                        thread::sleep(Duration::from_secs(10));
+                    }
+                }
             }
         }
     }
@@ -261,7 +278,7 @@ fn main() -> Result<(), Error> {
     thread::spawn(move || {
         let user_configuration = read_configuration_file();
         // print user config for debug
-        println!("== Configuration ==");
+        println!(" == Configuration == ");
         println!("\taudio_path : {}", user_configuration.0);
         println!("\tbattery_critical : {}", user_configuration.1);
         println!("\tbattery_low : {}", user_configuration.2);
@@ -272,6 +289,7 @@ fn main() -> Result<(), Error> {
         println!("\ttarget_session : {}", user_configuration.7);
         println!("\tenable_plug_in_check : {}", user_configuration.8);
         println!("\tplug_in_check_interval : {}", user_configuration.9);
+        println!(" == ~/.config/batt_reminder.toml == ");
 
         let check_session = get_session_env(&user_configuration.7);
         match user_configuration.6 {
