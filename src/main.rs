@@ -47,7 +47,7 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String, 
         false => {
             let mut create_config =
                 fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
-            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = \"sway\"").expect("Error while writing to file");
+            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = \"sway\"\nenable_plug_in_check = true\nplug_in_check_interval = 2").expect("Error while writing to file");
             println!("Created the config file.\nusing the default settings.");
             return (
                 // using default settings
