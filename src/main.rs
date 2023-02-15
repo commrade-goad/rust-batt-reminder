@@ -40,7 +40,13 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String, 
     let home_env: String = "HOME".to_string();
     let mut path_to_conf: String = match env::var(&home_env) {
         Ok(val) => val,
-        Err(e) => panic!("could not find {}: {}", &home_env, e),
+        Err(e) => {
+            err_notif(format!(
+                "goad-rust-batt-reminder could not find env var of {} = {}",
+                &home_env, e
+            ));
+            panic!("could not find {}: {}", &home_env, e);
+        }
     };
     path_to_conf.push_str("/.config/batt_reminder.toml");
     match std::path::Path::new(&path_to_conf).is_file() {
@@ -190,7 +196,14 @@ fn get_session_env(session: &String) -> i32 {
     let some_value = "XDG_CURRENT_DESKTOP".to_string();
     let get_current_session = match env::var(&some_value) {
         Ok(val) => val,
-        Err(e) => panic!("could not find {}: {}", &some_value, e),
+        Err(e) => {
+            err_notif(format!(
+                "goad-rust-batt-reminder could not found env var of {} = {}",
+                &some_value, e
+            ));
+            println!("could not found {} = {}", &some_value, e);
+            return 0;
+        }
     };
     match &get_current_session.eq(intended_session_name) {
         true => {
@@ -227,11 +240,14 @@ fn play_notif_sound(_path_to_file: &String) -> Result<i32, i32> {
     }
 }
 
-fn check_charging(path_to_file: &String, interval: u64){
-    println!("check_charging: this thread will check if the battery is Discharging every {} sec(s)...", &interval);
+fn check_charging(path_to_file: &String, interval: u64) {
+    println!(
+        "check_charging: this thread will check if the battery is Discharging every {} sec(s)...",
+        &interval
+    );
     loop {
         let battery_status = get_batt_status();
-        match &battery_status[..]{
+        match &battery_status[..] {
             // check from Discharging to charging
             "Discharging" => {
                 thread::sleep(Duration::from_secs(interval));
@@ -252,7 +268,7 @@ fn check_charging(path_to_file: &String, interval: u64){
             _ => {
                 // check from charging or full to Discharge
                 thread::sleep(Duration::from_secs(interval));
-                match &get_batt_status()[..]{
+                match &get_batt_status()[..] {
                     "Discharging" => {
                         match play_notif_sound(&path_to_file) {
                             Ok(..) => {
@@ -270,6 +286,15 @@ fn check_charging(path_to_file: &String, interval: u64){
             }
         }
     }
+}
+
+fn err_notif(string: String) {
+    process::Command::new("/usr/bin/dunstify")
+        .arg("-u")
+        .arg("2")
+        .arg(&format!("{string}"))
+        .spawn()
+        .expect("Failed!");
 }
 
 fn main() -> Result<(), Error> {
@@ -317,21 +342,18 @@ fn main() -> Result<(), Error> {
             the_program(&user_configuration);
         }
     });
-    
+
     match &user_configuration.8 {
         true => {
             thread::spawn(move || {
                 check_charging(&user_configuration.0, user_configuration.9);
             });
         }
-        false => {
-        }
+        false => {}
     }
-    
 
     let term = Arc::new(AtomicBool::new(false));
     for sig in signal_hook::consts::TERM_SIGNALS {
-        //flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term));
         flag::register(*sig, Arc::clone(&term))?;
     }
     while !term.load(Ordering::Relaxed) {
