@@ -41,9 +41,9 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String, 
     let mut path_to_conf: String = match env::var(&home_env) {
         Ok(val) => val,
         Err(e) => {
-            err_notif(format!(
-                "goad-rust-batt-reminder could not find env var of {} = {}",
-                &home_env, e
+            spawn_notif(format!(
+                "goad-rust-batt-reminder could not find env var of {}",
+                &home_env
             ));
             panic!("could not find {}: {}", &home_env, e);
         }
@@ -159,14 +159,9 @@ fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, String, b
             println!("Battery is Discharging");
             if batt_capacity < batt_alert_percentage {
                 println!("Batt level {}", batt_capacity);
-                process::Command::new("/usr/bin/dunstify")
-                    .arg("-u")
-                    .arg("2")
-                    .arg(&format!(
-                        "{batt_capacity} Battery remaining, please plug in the charger."
-                    ))
-                    .spawn()
-                    .expect("Failed!");
+                spawn_notif(format!(
+                    "{batt_capacity} Battery remaining, please plug in the charger."
+                ));
                 match play_notif_sound(&configuration.0.parse().unwrap()) {
                     Ok(..) => {
                         println!("Audio played");
@@ -197,12 +192,11 @@ fn get_session_env(session: &String) -> i32 {
     let get_current_session = match env::var(&some_value) {
         Ok(val) => val,
         Err(e) => {
-            err_notif(format!(
-                "goad-rust-batt-reminder could not found env var of {} = {}",
-                &some_value, e
+            spawn_notif(format!(
+                "goad-rust-batt-reminder could not found env var of {}",
+                &some_value
             ));
-            println!("could not found {} = {}", &some_value, e);
-            return 0;
+            panic!("could not found {} = {}", &some_value, e);
         }
     };
     match &get_current_session.eq(intended_session_name) {
@@ -280,7 +274,7 @@ fn check_charging(path_to_file: &String, interval: u64) {
                         };
                     }
                     _ => {
-                        thread::sleep(Duration::from_secs(10));
+                        thread::sleep(Duration::from_secs(5));
                     }
                 }
             }
@@ -288,7 +282,7 @@ fn check_charging(path_to_file: &String, interval: u64) {
     }
 }
 
-fn err_notif(string: String) {
+fn spawn_notif(string: String) {
     process::Command::new("/usr/bin/dunstify")
         .arg("-u")
         .arg("2")
@@ -299,7 +293,6 @@ fn err_notif(string: String) {
 
 fn main() -> Result<(), Error> {
     let user_configuration = read_configuration_file();
-    println!("Reading the configuration file...");
     thread::spawn(move || {
         let user_configuration = read_configuration_file();
         // print user config for debug
