@@ -30,22 +30,33 @@ struct Config {
     critical_sleep_time: u64,
     starting_bleep: bool,
     target_session: String,
+    enable_plug_in_check: bool,
+    plug_in_check_interval: u64,
 }
 
 //
 
-fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String) {
+fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String, bool, u64) {
     let home_env: String = "HOME".to_string();
     let mut path_to_conf: String = match env::var(&home_env) {
         Ok(val) => val,
-        Err(e) => panic!("could not find {}: {}", &home_env, e),
+        Err(e) => {
+            spawn_notif(
+                format!(
+                    "goad-rust-batt-reminder could not find env var of {}",
+                    &home_env
+                ),
+                0,
+            );
+            panic!("could not find {}: {}", &home_env, e);
+        }
     };
     path_to_conf.push_str("/.config/batt_reminder.toml");
     match std::path::Path::new(&path_to_conf).is_file() {
         false => {
             let mut create_config =
                 fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
-            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = \"sway\"").expect("Error while writing to file");
+            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = \"sway\"\nenable_plug_in_check = true\nplug_in_check_interval = 2").expect("Error while writing to file");
             println!("Created the config file.\nusing the default settings.");
             return (
                 // using default settings
@@ -57,10 +68,11 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String) 
                 120,
                 false,
                 "sway".to_string(),
+                true,
+                2,
             );
         }
         true => {
-            println!("Reading the config file..");
             let contents: String = match fs::read_to_string(path_to_conf) {
                 Ok(c) => c,
                 Err(_) => {
@@ -84,6 +96,8 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String) 
                 data.config.critical_sleep_time,
                 data.config.starting_bleep,
                 data.config.target_session,
+                data.config.enable_plug_in_check,
+                data.config.plug_in_check_interval,
             );
         }
     }
@@ -116,7 +130,7 @@ fn program_lock() -> i32 {
         }
         true => {
             println!(
-                "The program is already running.\nclose the program and do 'rm {}'",
+                "The program is already running.\nclose the program and do 'rm {}' if the lock file failed to be deleted automatically",
                 lock_file_location
             );
             return 1;
@@ -124,7 +138,7 @@ fn program_lock() -> i32 {
     }
 }
 
-fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, String)) {
+fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, String, bool, u64)) {
     // basic settings
     let batt_alert_percentage: i32 = configuration.1;
     let batt_low_percentage: i32 = configuration.2;
@@ -148,14 +162,10 @@ fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, String)) 
             println!("Battery is Discharging");
             if batt_capacity < batt_alert_percentage {
                 println!("Batt level {}", batt_capacity);
-                process::Command::new("/usr/bin/dunstify")
-                    .arg("-u")
-                    .arg("2")
-                    .arg(&format!(
-                        "{batt_capacity} Battery remaining, please plug in the charger."
-                    ))
-                    .spawn()
-                    .expect("Failed!");
+                spawn_notif(
+                    format!("{batt_capacity} Battery remaining, please plug in the charger."),
+                    batt_capacity,
+                );
                 match play_notif_sound(&configuration.0.parse().unwrap()) {
                     Ok(..) => {
                         println!("Audio played");
@@ -185,7 +195,16 @@ fn get_session_env(session: &String) -> i32 {
     let some_value = "XDG_CURRENT_DESKTOP".to_string();
     let get_current_session = match env::var(&some_value) {
         Ok(val) => val,
-        Err(e) => panic!("could not find {}: {}", &some_value, e),
+        Err(e) => {
+            spawn_notif(
+                format!(
+                    "goad-rust-batt-reminder could not found env var of {}",
+                    &some_value
+                ),
+                0,
+            );
+            panic!("could not found {} = {}", &some_value, e);
+        }
     };
     match &get_current_session.eq(intended_session_name) {
         true => {
@@ -222,18 +241,97 @@ fn play_notif_sound(_path_to_file: &String) -> Result<i32, i32> {
     }
 }
 
+fn check_charging(path_to_file: &String, interval: u64) {
+    println!(
+        "check_charging: this thread will check if the battery is Discharging every {} sec(s)...",
+        &interval
+    );
+    loop {
+        let battery_status = get_batt_status();
+        match &battery_status[..] {
+            // check from Discharging to charging
+            "Discharging" => {
+                thread::sleep(Duration::from_secs(interval));
+                match &get_batt_status()[..] {
+                    "Discharging" => {}
+                    _ => {
+                        match play_notif_sound(&path_to_file) {
+                            Ok(..) => {
+                                println!("Audio played");
+                            }
+                            _ => {
+                                println!("Audio Cant be played");
+                            }
+                        };
+                    }
+                }
+            }
+            _ => {
+                // check from charging or full to Discharge
+                thread::sleep(Duration::from_secs(interval));
+                match &get_batt_status()[..] {
+                    "Discharging" => {
+                        match play_notif_sound(&path_to_file) {
+                            Ok(..) => {
+                                println!("Audio played");
+                            }
+                            _ => {
+                                println!("Audio Cant be played");
+                            }
+                        };
+                    }
+                    _ => {
+                        thread::sleep(Duration::from_secs(5));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn spawn_notif(string: String, progress_bar_value: i32) {
+    match &progress_bar_value {
+        0 => {
+            process::Command::new("/usr/bin/dunstify")
+                .arg("--appname=sway")
+                .arg("-u")
+                .arg("2")
+                .arg(&format!("{string}"))
+                .spawn()
+                .expect("Failed!");
+        }
+        _ => {
+            process::Command::new("/usr/bin/dunstify")
+                .arg("--appname=sway")
+                .arg("-h")
+                .arg(&format!("int:value:{}", progress_bar_value))
+                .arg("-u")
+                .arg("2")
+                .arg(&format!("{string}"))
+                .spawn()
+                .expect("Failed!");
+        }
+    }
+}
+
 fn main() -> Result<(), Error> {
+    let user_configuration = read_configuration_file();
+
     thread::spawn(move || {
         let user_configuration = read_configuration_file();
         // print user config for debug
-        println!("audio_path : {}", user_configuration.0);
-        println!("battery_critical : {}", user_configuration.1);
-        println!("battery_low : {}", user_configuration.2);
-        println!("normal_sleep_time : {}", user_configuration.3);
-        println!("fast_sleep_time : {}", user_configuration.4);
-        println!("critical_sleep_time : {}", user_configuration.5);
-        println!("starting_bleep = {}", user_configuration.6);
-        println!("target_session = {}", user_configuration.7);
+        println!(" == Configuration == ");
+        println!("\taudio_path : {}", user_configuration.0);
+        println!("\tbattery_critical : {}", user_configuration.1);
+        println!("\tbattery_low : {}", user_configuration.2);
+        println!("\tnormal_sleep_time : {}", user_configuration.3);
+        println!("\tfast_sleep_time : {}", user_configuration.4);
+        println!("\tcritical_sleep_time : {}", user_configuration.5);
+        println!("\tstarting_bleep : {}", user_configuration.6);
+        println!("\ttarget_session : {}", user_configuration.7);
+        println!("\tenable_plug_in_check : {}", user_configuration.8);
+        println!("\tplug_in_check_interval : {}", user_configuration.9);
+        println!(" == ~/.config/batt_reminder.toml == ");
 
         let check_session = get_session_env(&user_configuration.7);
         match user_configuration.6 {
@@ -262,9 +360,17 @@ fn main() -> Result<(), Error> {
         }
     });
 
+    match &user_configuration.8 {
+        true => {
+            thread::spawn(move || {
+                check_charging(&user_configuration.0, user_configuration.9);
+            });
+        }
+        false => {}
+    }
+
     let term = Arc::new(AtomicBool::new(false));
     for sig in signal_hook::consts::TERM_SIGNALS {
-        //flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term));
         flag::register(*sig, Arc::clone(&term))?;
     }
     while !term.load(Ordering::Relaxed) {
