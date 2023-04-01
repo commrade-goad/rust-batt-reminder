@@ -163,7 +163,7 @@ fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, String, b
             if batt_capacity < batt_alert_percentage {
                 println!("Batt level {}", batt_capacity);
                 spawn_notif(
-                    format!("{batt_capacity} Battery remaining, please plug in the charger."),
+                    format!("{batt_capacity}% Battery remaining, please plug in the charger."),
                     batt_capacity,
                 );
                 match play_notif_sound(&configuration.0.parse().unwrap()) {
