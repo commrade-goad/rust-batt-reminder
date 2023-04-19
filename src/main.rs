@@ -29,14 +29,14 @@ struct Config {
     fast_sleep_time: u64,
     critical_sleep_time: u64,
     starting_bleep: bool,
-    target_session: String,
+    target_session: Vec<String>,
     enable_plug_in_check: bool,
     plug_in_check_interval: u64,
 }
 
 //
 
-fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String, bool, u64) {
+fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, Vec<String>, bool, u64) {
     let home_env: String = "HOME".to_string();
     let mut path_to_conf: String = match env::var(&home_env) {
         Ok(val) => val,
@@ -56,7 +56,7 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String, 
         false => {
             let mut create_config =
                 fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
-            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = \"sway\"\nenable_plug_in_check = true\nplug_in_check_interval = 2").expect("Error while writing to file");
+            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = [\"any\"]\nenable_plug_in_check = true\nplug_in_check_interval = 2").expect("Error while writing to file");
             println!("Created the config file.\nusing the default settings.");
             return (
                 // using default settings
@@ -67,7 +67,7 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, String, 
                 5,
                 120,
                 false,
-                "sway".to_string(),
+                vec! ["any".to_string()],
                 true,
                 2,
             );
@@ -138,7 +138,7 @@ fn program_lock() -> i32 {
     }
 }
 
-fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, String, bool, u64)) {
+fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, Vec<String>, bool, u64)) {
     // basic settings
     let batt_alert_percentage: i32 = configuration.1;
     let batt_low_percentage: i32 = configuration.2;
@@ -190,7 +190,7 @@ fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, String, b
     thread::sleep(Duration::from_secs(5));
 }
 
-fn get_session_env(session: &String) -> i32 {
+fn get_session_env(session: &Vec<String>) -> i32 {
     let intended_session_name = &session.to_owned();
     let some_value = "XDG_CURRENT_DESKTOP".to_string();
     let get_current_session = match env::var(&some_value) {
@@ -206,14 +206,12 @@ fn get_session_env(session: &String) -> i32 {
             panic!("could not found {} = {}", &some_value, e);
         }
     };
-    match &get_current_session.eq(intended_session_name) {
-        true => {
+    for i in 0..intended_session_name.len(){
+        if get_current_session.eq(&intended_session_name[i]) == true || intended_session_name[i].eq("any") == true {
             return 0;
         }
-        _ => {
-            return 1;
-        }
     }
+    return 1;
 }
 
 fn play_notif_sound(_path_to_file: &String) -> Result<i32, i32> {
@@ -293,24 +291,28 @@ fn spawn_notif(string: String, progress_bar_value: i32) {
     match &progress_bar_value {
         0 => {
             process::Command::new("/usr/bin/dunstify")
-                .arg("--appname=sway")
+                .arg("--appname=batt-reminder")
                 .arg("-r")
                 .arg("2592")
                 .arg("-u")
                 .arg("2")
+                .arg("-t")
+                .arg("10000")
                 .arg(&format!("{string}"))
                 .spawn()
                 .expect("Failed!");
         }
         _ => {
             process::Command::new("/usr/bin/dunstify")
-                .arg("--appname=sway")
+                .arg("--appname=batt-reminder")
                 .arg("-r")
                 .arg("2592")
                 .arg("-h")
                 .arg(&format!("int:value:{}", progress_bar_value))
                 .arg("-u")
                 .arg("2")
+                .arg("-t")
+                .arg("10000")
                 .arg(&format!("{string}"))
                 .spawn()
                 .expect("Failed!");
@@ -332,7 +334,7 @@ fn main() -> Result<(), Error> {
         println!("\tfast_sleep_time : {}", user_configuration.4);
         println!("\tcritical_sleep_time : {}", user_configuration.5);
         println!("\tstarting_bleep : {}", user_configuration.6);
-        println!("\ttarget_session : {}", user_configuration.7);
+        println!("\ttarget_session : {:?}", user_configuration.7);
         println!("\tenable_plug_in_check : {}", user_configuration.8);
         println!("\tplug_in_check_interval : {}", user_configuration.9);
         println!(" == ~/.config/batt_reminder.toml == ");
@@ -354,12 +356,10 @@ fn main() -> Result<(), Error> {
         if check_session == 1 {
             process::exit(1);
         }
-        let check_lock = program_lock();
-        if check_lock == 1 {
+        if program_lock() == 1 {
             process::exit(1);
         }
-        let program_loop = 1;
-        while program_loop == 1 {
+        loop {
             the_program(&user_configuration);
         }
     });
@@ -378,7 +378,7 @@ fn main() -> Result<(), Error> {
         flag::register(*sig, Arc::clone(&term))?;
     }
     while !term.load(Ordering::Relaxed) {
-        thread::sleep(Duration::from_secs(2));
+        thread::sleep(Duration::from_secs(1));
     }
     fs::remove_file("/tmp/batt_file_lock.lock")
         .expect("Failed to delete the lock file.\n Please delete it manually.");
