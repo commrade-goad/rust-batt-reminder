@@ -32,11 +32,30 @@ struct Config {
     target_session: Vec<String>,
     enable_plug_in_check: bool,
     plug_in_check_interval: u64,
+    signal_check_interval: u64,
+}
+
+impl Config {
+    fn default_config() -> Config {
+        return Config { 
+            audio_path: "none".to_string(),
+            battery_critical: 30,
+            battery_low: 45,
+            normal_sleep_time: 300,
+            fast_sleep_time: 5,
+            critical_sleep_time: 120,
+            starting_bleep: false,
+            target_session: vec! ["any".to_string()],
+            enable_plug_in_check: true,
+            plug_in_check_interval: 2,
+            signal_check_interval: 1000,
+        };
+    }
 }
 
 //
 
-fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, Vec<String>, bool, u64) {
+fn read_configuration_file() -> Config {
     let home_env: String = "HOME".to_string();
     let mut path_to_conf: String = match env::var(&home_env) {
         Ok(val) => val,
@@ -56,21 +75,9 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, Vec<Stri
         false => {
             let mut create_config =
                 fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
-            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = [\"any\"]\nenable_plug_in_check = true\nplug_in_check_interval = 2").expect("Error while writing to file");
+            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = [\"any\"]\nenable_plug_in_check = true\nplug_in_check_interval = 2\nsignal_check_interval = 1000").expect("Error while writing to file");
             println!("Created the config file.\nusing the default settings.");
-            return (
-                // using default settings
-                "none".to_string(),
-                30,
-                45,
-                300,
-                5,
-                120,
-                false,
-                vec! ["any".to_string()],
-                true,
-                2,
-            );
+            return Config::default_config();
         }
         true => {
             let contents: String = match fs::read_to_string(path_to_conf) {
@@ -87,18 +94,7 @@ fn read_configuration_file() -> (String, i32, i32, u64, u64, u64, bool, Vec<Stri
                     process::exit(1);
                 }
             };
-            return (
-                data.config.audio_path,
-                data.config.battery_critical,
-                data.config.battery_low,
-                data.config.normal_sleep_time,
-                data.config.fast_sleep_time,
-                data.config.critical_sleep_time,
-                data.config.starting_bleep,
-                data.config.target_session,
-                data.config.enable_plug_in_check,
-                data.config.plug_in_check_interval,
-            );
+            return data.config;
         }
     }
 }
@@ -138,13 +134,13 @@ fn program_lock() -> i32 {
     }
 }
 
-fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, Vec<String>, bool, u64)) {
+fn the_program(configuration: &Config) {
     // basic settings
-    let batt_alert_percentage: i32 = configuration.1;
-    let batt_low_percentage: i32 = configuration.2;
-    let sleep_time_normal: u64 = configuration.3;
-    let sleep_time_alert: u64 = configuration.4;
-    let sleep_time_fast: u64 = configuration.5;
+    let batt_alert_percentage: i32 = configuration.battery_critical;
+    let batt_low_percentage: i32 = configuration.battery_low;
+    let sleep_time_normal: u64 = configuration.normal_sleep_time;
+    let sleep_time_alert: u64 = configuration.fast_sleep_time;
+    let sleep_time_fast: u64 = configuration.critical_sleep_time;
 
     let batt_status: String = get_batt_status();
     let batt_capacity: i32 = get_batt_percentage();
@@ -166,7 +162,7 @@ fn the_program(configuration: &(String, i32, i32, u64, u64, u64, bool, Vec<Strin
                     format!("{batt_capacity}% Battery remaining, please plug in the charger."),
                     batt_capacity,
                 );
-                match play_notif_sound(&configuration.0.parse().unwrap()) {
+                match play_notif_sound(&configuration.audio_path.parse().unwrap()) {
                     Ok(..) => {
                         println!("Audio played");
                     }
@@ -327,22 +323,23 @@ fn main() -> Result<(), Error> {
         let user_configuration = read_configuration_file();
         // print user config for debug
         println!(" == Configuration == ");
-        println!("\taudio_path : {}", user_configuration.0);
-        println!("\tbattery_critical : {}", user_configuration.1);
-        println!("\tbattery_low : {}", user_configuration.2);
-        println!("\tnormal_sleep_time : {}", user_configuration.3);
-        println!("\tfast_sleep_time : {}", user_configuration.4);
-        println!("\tcritical_sleep_time : {}", user_configuration.5);
-        println!("\tstarting_bleep : {}", user_configuration.6);
-        println!("\ttarget_session : {:?}", user_configuration.7);
-        println!("\tenable_plug_in_check : {}", user_configuration.8);
-        println!("\tplug_in_check_interval : {}", user_configuration.9);
+        println!("\taudio_path : {}", user_configuration.audio_path);
+        println!("\tbattery_critical : {}", user_configuration.battery_critical);
+        println!("\tbattery_low : {}", user_configuration.battery_low);
+        println!("\tnormal_sleep_time : {}", user_configuration.normal_sleep_time);
+        println!("\tfast_sleep_time : {}", user_configuration.fast_sleep_time);
+        println!("\tcritical_sleep_time : {}", user_configuration.critical_sleep_time);
+        println!("\tstarting_bleep : {}", user_configuration.starting_bleep);
+        println!("\ttarget_session : {:?}", user_configuration.target_session);
+        println!("\tenable_plug_in_check : {}", user_configuration.enable_plug_in_check);
+        println!("\tplug_in_check_interval : {}", user_configuration.plug_in_check_interval);
+        println!("\tsignal_check_interval : {}", user_configuration.signal_check_interval);
         println!(" == ~/.config/batt_reminder.toml == ");
 
-        let check_session = get_session_env(&user_configuration.7);
-        match user_configuration.6 {
+        let check_session = get_session_env(&user_configuration.target_session);
+        match user_configuration.starting_bleep {
             true => {
-                match play_notif_sound(&user_configuration.0) {
+                match play_notif_sound(&user_configuration.audio_path) {
                     Ok(..) => {
                         println!("Audio played");
                     }
@@ -364,10 +361,10 @@ fn main() -> Result<(), Error> {
         }
     });
 
-    match &user_configuration.8 {
+    match &user_configuration.enable_plug_in_check {
         true => {
             thread::spawn(move || {
-                check_charging(&user_configuration.0, user_configuration.9);
+                check_charging(&user_configuration.audio_path, user_configuration.plug_in_check_interval);
             });
         }
         false => {}
@@ -378,7 +375,7 @@ fn main() -> Result<(), Error> {
         flag::register(*sig, Arc::clone(&term))?;
     }
     while !term.load(Ordering::Relaxed) {
-        thread::sleep(Duration::from_secs(1));
+        thread::sleep(Duration::from_millis(user_configuration.signal_check_interval));
     }
     fs::remove_file("/tmp/batt_file_lock.lock")
         .expect("Failed to delete the lock file.\n Please delete it manually.");
