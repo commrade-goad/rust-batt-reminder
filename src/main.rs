@@ -6,6 +6,7 @@ use std::fs;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::io::Error;
+use std::path;
 use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -33,6 +34,8 @@ struct Config {
     enable_plug_in_check: bool,
     plug_in_check_interval: u64,
     signal_check_interval: u64,
+    path_to_capacity: String,
+    path_to_status: String,
 }
 
 impl Config {
@@ -49,6 +52,8 @@ impl Config {
             enable_plug_in_check: true,
             plug_in_check_interval: 2,
             signal_check_interval: 1000,
+            path_to_status: "/sys/class/power_supply/BAT1/status".to_string(),
+            path_to_capacity: "/sys/class/power_supply/BAT1/status".to_string(),
         };
     }
 }
@@ -71,7 +76,7 @@ fn read_configuration_file() -> Config {
         }
     };
     path_to_conf.push_str("/.config/batt_reminder.toml");
-    match std::path::Path::new(&path_to_conf).is_file() {
+    match path::Path::new(&path_to_conf).is_file() {
         false => {
             let mut create_config =
                 fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
@@ -99,23 +104,23 @@ fn read_configuration_file() -> Config {
     }
 }
 
-fn get_batt_percentage() -> i32 {
+fn get_batt_percentage(path_to_file: &String) -> i32 {
     let batt_capacity_percentage: String =
-        fs::read_to_string("/sys/class/power_supply/BAT1/capacity")
+        fs::read_to_string(path_to_file)
             .expect("Failed read the battery capacity!");
     let batt_capacity_percentage_int: i32 = batt_capacity_percentage.trim().parse::<i32>().unwrap();
     return batt_capacity_percentage_int;
 }
 
-fn get_batt_status() -> String {
-    let bat_status = fs::read_to_string("/sys/class/power_supply/BAT1/status")
+fn get_batt_status(path_to_file: &String) -> String {
+    let bat_status = fs::read_to_string(path_to_file)
         .expect("Failed read the battery status!");
     return bat_status.trim().to_string();
 }
 
 fn program_lock() -> i32 {
     let lock_file_location: String = "/tmp/batt_file_lock.lock".to_string();
-    match std::path::Path::new(&lock_file_location).is_file() {
+    match path::Path::new(&lock_file_location).is_file() {
         false => {
             let mut file_lock = fs::File::create(lock_file_location)
                 .expect("Error encountered while creating file!");
@@ -142,8 +147,8 @@ fn the_program(configuration: &Config) {
     let sleep_time_alert: u64 = configuration.fast_sleep_time;
     let sleep_time_fast: u64 = configuration.critical_sleep_time;
 
-    let batt_status: String = get_batt_status();
-    let batt_capacity: i32 = get_batt_percentage();
+    let batt_status: String = get_batt_status(&configuration.path_to_status);
+    let batt_capacity: i32 = get_batt_percentage(&configuration.path_to_capacity);
     match &batt_status[..] {
         "Charging" => {
             println!("Battery is Charging");
@@ -217,7 +222,7 @@ fn play_notif_sound(_path_to_file: &String) -> Result<i32, i32> {
         }
         _ => {}
     }
-    match std::path::Path::new(&_path_to_file).is_file() {
+    match path::Path::new(&_path_to_file).is_file() {
         false => {
             println!("Error : Cant read the specified file directory!");
             return Err(1);
@@ -235,18 +240,18 @@ fn play_notif_sound(_path_to_file: &String) -> Result<i32, i32> {
     }
 }
 
-fn check_charging(path_to_file: &String, interval: u64) {
+fn check_charging(path_to_file: &String, interval: u64, path_to_status: &String) {
     println!(
         "check_charging: this thread will check if the battery is Discharging every {} sec(s)...",
         &interval
     );
     loop {
-        let battery_status = get_batt_status();
+        let battery_status = get_batt_status(path_to_status);
         match &battery_status[..] {
             // check from Discharging to charging
             "Discharging" => {
                 thread::sleep(Duration::from_secs(interval));
-                match &get_batt_status()[..] {
+                match &get_batt_status(path_to_status)[..] {
                     "Discharging" => {}
                     _ => {
                         match play_notif_sound(&path_to_file) {
@@ -263,7 +268,7 @@ fn check_charging(path_to_file: &String, interval: u64) {
             _ => {
                 // check from charging or full to Discharge
                 thread::sleep(Duration::from_secs(interval));
-                match &get_batt_status()[..] {
+                match &get_batt_status(path_to_status)[..] {
                     "Discharging" => {
                         match play_notif_sound(&path_to_file) {
                             Ok(..) => {
@@ -334,6 +339,8 @@ fn main() -> Result<(), Error> {
         println!("\tenable_plug_in_check : {}", user_configuration.enable_plug_in_check);
         println!("\tplug_in_check_interval : {}", user_configuration.plug_in_check_interval);
         println!("\tsignal_check_interval : {}", user_configuration.signal_check_interval);
+        println!("\tpath_to_status : {}", user_configuration.path_to_status);
+        println!("\tpath_to_capacity : {}", user_configuration.path_to_capacity);
         println!(" == ~/.config/batt_reminder.toml == ");
 
         let check_session = get_session_env(&user_configuration.target_session);
@@ -364,7 +371,7 @@ fn main() -> Result<(), Error> {
     match &user_configuration.enable_plug_in_check {
         true => {
             thread::spawn(move || {
-                check_charging(&user_configuration.audio_path, user_configuration.plug_in_check_interval);
+                check_charging(&user_configuration.audio_path, user_configuration.plug_in_check_interval, &user_configuration.path_to_status);
             });
         }
         false => {}
