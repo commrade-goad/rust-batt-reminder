@@ -80,7 +80,7 @@ fn read_configuration_file() -> Config {
         false => {
             let mut create_config =
                 fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
-            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = [\"any\"]\nenable_plug_in_check = true\nplug_in_check_interval = 2\nsignal_check_interval = 1000").expect("Error while writing to file");
+            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = [\"any\"]\nenable_plug_in_check = true\nplug_in_check_interval = 2\nsignal_check_interval = 1000\npath_to_status = \"/sys/class/power_supply/BAT1/status\"\npath_to_capacity = \"/sys/class/power_supply/BAT1/capacity\"").expect("Error while writing to file");
             println!("Created the config file.\nusing the default settings.");
             return Config::default_config();
         }
