@@ -90,8 +90,8 @@ fn read_configuration_file() -> Config {
             let data: Data = match toml::from_str(&contents) {
                 Ok(d) => d,
                 Err(_) => {
-                    println!("Unable to load the config file!");
-                    process::exit(1);
+                    println!("Failed to parse the config file! Using the default config..");
+                    return Config::default_config();
                 }
             };
             return data.config;
