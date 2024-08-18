@@ -118,25 +118,43 @@ fn get_batt_status(path_to_file: &String) -> String {
     return bat_status.trim().to_string();
 }
 
+fn write_prog_pid(lock_file_location: String, pid: u32) -> () {
+    let mut file_lock = fs::File::create(lock_file_location)
+        .expect("Error encountered while creating file!");
+    file_lock
+        .write_all(format!("{}", pid).as_bytes())
+        .expect("Error while writing to file");
+}
+
 fn program_lock() -> i32 {
+    let pid: u32 = process::id();
     let lock_file_location: String = "/tmp/batt_file_lock.lock".to_string();
     match path::Path::new(&lock_file_location).is_file() {
         false => {
-            let mut file_lock = fs::File::create(lock_file_location)
-                .expect("Error encountered while creating file!");
-            file_lock
-                .write_all(b"Running\n")
-                .expect("Error while writing to file");
+            write_prog_pid(lock_file_location.clone(), pid);
             return 0;
         }
         true => {
-            println!(
-                "The program is already running.\nclose the program and do 'rm {}' if the lock file failed to be deleted automatically",
-                lock_file_location
-            );
-            return 1;
+            let c_pid: Option<String> = match fs::read_to_string("/tmp/batt_file_lock.lock".to_string()) {
+                Ok(val) => Some(val),
+                Err(_) => None
+            };
+            match c_pid {
+                Some(val) => {
+                    if std::path::Path::new(&format!("/proc/{}", val)).exists() {
+                        println!(
+                            "The program is already running.\nclose the program and do 'rm {}' if the lock file failed to be deleted automatically",
+                            lock_file_location
+                        );
+                        return 1;
+                    }
+                    write_prog_pid(lock_file_location.clone(), pid);
+                }
+                None => write_prog_pid(lock_file_location.clone(), pid)
+            };
         }
     }
+    return 0;
 }
 
 fn the_program(configuration: &Config) {
