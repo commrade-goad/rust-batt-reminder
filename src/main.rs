@@ -1,5 +1,6 @@
+mod config;
+use config::*;
 use rodio::{source::Source, Decoder, OutputStream};
-use serde_derive::Deserialize;
 use signal_hook::flag;
 use std::env;
 use std::fs;
@@ -13,52 +14,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use toml;
-
-// CONFIG STRUCT
-
-#[derive(Deserialize)]
-struct Data {
-    config: Config,
-}
-
-#[derive(Deserialize)]
-struct Config {
-    audio_path: String,
-    battery_critical: i32,
-    battery_low: i32,
-    normal_sleep_time: u64,
-    fast_sleep_time: u64,
-    critical_sleep_time: u64,
-    starting_bleep: bool,
-    target_session: Vec<String>,
-    enable_plug_in_check: bool,
-    plug_in_check_interval: u64,
-    signal_check_interval: u64,
-    path_to_capacity: String,
-    path_to_status: String,
-}
-
-impl Config {
-    fn default_config() -> Config {
-        return Config { 
-            audio_path: "none".to_string(),
-            battery_critical: 30,
-            battery_low: 45,
-            normal_sleep_time: 300,
-            fast_sleep_time: 5,
-            critical_sleep_time: 120,
-            starting_bleep: false,
-            target_session: vec! ["any".to_string()],
-            enable_plug_in_check: true,
-            plug_in_check_interval: 2,
-            signal_check_interval: 1000,
-            path_to_status: "/sys/class/power_supply/BAT1/status".to_string(),
-            path_to_capacity: "/sys/class/power_supply/BAT1/status".to_string(),
-        };
-    }
-}
-
-//
 
 fn read_configuration_file() -> Config {
     let home_env: String = "HOME".to_string();
@@ -78,10 +33,20 @@ fn read_configuration_file() -> Config {
     path_to_conf.push_str("/.config/batt_reminder.toml");
     match path::Path::new(&path_to_conf).is_file() {
         false => {
-            let mut create_config =
-                fs::File::create(&path_to_conf).expect("Error encountered while creating file!");
-            create_config.write_all(b"[config]\naudio_path = \"none\"\nbattery_critical = 30\nbattery_low = 45\nnormal_sleep_time = 300\n fast_sleep_time = 5\ncritical_sleep_time = 120\nstarting_bleep = true\ntarget_session = [\"any\"]\nenable_plug_in_check = true\nplug_in_check_interval = 2\nsignal_check_interval = 1000\npath_to_status = \"/sys/class/power_supply/BAT1/status\"\npath_to_capacity = \"/sys/class/power_supply/BAT1/capacity\"").expect("Error while writing to file");
-            println!("Created the config file.\nusing the default settings.");
+            let create_config: Data = Data {
+                config: Config::default_config(),
+            };
+            match toml::to_string(&create_config) {
+                Ok(val) => {
+                    let mut some = fs::File::create(&path_to_conf)
+                        .expect("Error encountered while creating file!");
+                    some.write_all(val.as_bytes())
+                        .expect("Error encountered while writing to the file!");
+                }
+                Err(e) => {
+                    panic!("{}", e);
+                }
+            }
             return Config::default_config();
         }
         true => {
@@ -106,21 +71,19 @@ fn read_configuration_file() -> Config {
 
 fn get_batt_percentage(path_to_file: &String) -> i32 {
     let batt_capacity_percentage: String =
-        fs::read_to_string(path_to_file)
-            .expect("Failed read the battery capacity!");
+        fs::read_to_string(path_to_file).expect("Failed read the battery capacity!");
     let batt_capacity_percentage_int: i32 = batt_capacity_percentage.trim().parse::<i32>().unwrap();
     return batt_capacity_percentage_int;
 }
 
 fn get_batt_status(path_to_file: &String) -> String {
-    let bat_status = fs::read_to_string(path_to_file)
-        .expect("Failed read the battery status!");
+    let bat_status = fs::read_to_string(path_to_file).expect("Failed read the battery status!");
     return bat_status.trim().to_string();
 }
 
 fn write_prog_pid(lock_file_location: String, pid: u32) -> () {
-    let mut file_lock = fs::File::create(lock_file_location)
-        .expect("Error encountered while creating file!");
+    let mut file_lock =
+        fs::File::create(lock_file_location).expect("Error encountered while creating file!");
     file_lock
         .write_all(format!("{}", pid).as_bytes())
         .expect("Error while writing to file");
@@ -135,10 +98,11 @@ fn program_lock() -> i32 {
             return 0;
         }
         true => {
-            let c_pid: Option<String> = match fs::read_to_string("/tmp/batt_file_lock.lock".to_string()) {
-                Ok(val) => Some(val),
-                Err(_) => None
-            };
+            let c_pid: Option<String> =
+                match fs::read_to_string("/tmp/batt_file_lock.lock".to_string()) {
+                    Ok(val) => Some(val),
+                    Err(_) => None,
+                };
             match c_pid {
                 Some(val) => {
                     if std::path::Path::new(&format!("/proc/{}", val)).exists() {
@@ -150,7 +114,7 @@ fn program_lock() -> i32 {
                     }
                     write_prog_pid(lock_file_location.clone(), pid);
                 }
-                None => write_prog_pid(lock_file_location.clone(), pid)
+                None => write_prog_pid(lock_file_location.clone(), pid),
             };
         }
     }
@@ -225,8 +189,10 @@ fn get_session_env(session: &Vec<String>) -> i32 {
             panic!("could not found {} = {}", &some_value, e);
         }
     };
-    for i in 0..intended_session_name.len(){
-        if get_current_session.eq(&intended_session_name[i]) == true || intended_session_name[i].eq("any") == true {
+    for i in 0..intended_session_name.len() {
+        if get_current_session.eq(&intended_session_name[i]) == true
+            || intended_session_name[i].eq("any") == true
+        {
             return 0;
         }
     }
@@ -345,21 +311,7 @@ fn main() -> Result<(), Error> {
     thread::spawn(move || {
         let user_configuration = read_configuration_file();
         // print user config for debug
-        println!(" == Configuration == ");
-        println!("\taudio_path : {}", user_configuration.audio_path);
-        println!("\tbattery_critical : {}", user_configuration.battery_critical);
-        println!("\tbattery_low : {}", user_configuration.battery_low);
-        println!("\tnormal_sleep_time : {}", user_configuration.normal_sleep_time);
-        println!("\tfast_sleep_time : {}", user_configuration.fast_sleep_time);
-        println!("\tcritical_sleep_time : {}", user_configuration.critical_sleep_time);
-        println!("\tstarting_bleep : {}", user_configuration.starting_bleep);
-        println!("\ttarget_session : {:?}", user_configuration.target_session);
-        println!("\tenable_plug_in_check : {}", user_configuration.enable_plug_in_check);
-        println!("\tplug_in_check_interval : {}", user_configuration.plug_in_check_interval);
-        println!("\tsignal_check_interval : {}", user_configuration.signal_check_interval);
-        println!("\tpath_to_status : {}", user_configuration.path_to_status);
-        println!("\tpath_to_capacity : {}", user_configuration.path_to_capacity);
-        println!(" == ~/.config/batt_reminder.toml == ");
+        user_configuration.print_debug();
 
         let check_session = get_session_env(&user_configuration.target_session);
         match user_configuration.starting_bleep {
@@ -389,7 +341,11 @@ fn main() -> Result<(), Error> {
     match &user_configuration.enable_plug_in_check {
         true => {
             thread::spawn(move || {
-                check_charging(&user_configuration.audio_path, user_configuration.plug_in_check_interval, &user_configuration.path_to_status);
+                check_charging(
+                    &user_configuration.audio_path,
+                    user_configuration.plug_in_check_interval,
+                    &user_configuration.path_to_status,
+                );
             });
         }
         false => {}
@@ -400,7 +356,9 @@ fn main() -> Result<(), Error> {
         flag::register(*sig, Arc::clone(&term))?;
     }
     while !term.load(Ordering::Relaxed) {
-        thread::sleep(Duration::from_millis(user_configuration.signal_check_interval));
+        thread::sleep(Duration::from_millis(
+            user_configuration.signal_check_interval,
+        ));
     }
     fs::remove_file("/tmp/batt_file_lock.lock")
         .expect("Failed to delete the lock file.\n Please delete it manually.");
