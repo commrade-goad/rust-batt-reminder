@@ -1,5 +1,5 @@
 [package]
-name = "goad-rust-batt-reminder"
+name = "rust-batt-reminder"
 version = "1.1.6"
 edition = "2021"
 
